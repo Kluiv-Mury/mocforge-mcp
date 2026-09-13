@@ -1,0 +1,7 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+data/ldraw/*
+data/parts_library.json
+!data/.gitkeep
