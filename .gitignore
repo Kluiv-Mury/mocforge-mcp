@@ -5,3 +5,5 @@ __pycache__/
 data/ldraw/*
 data/parts_library.json
 !data/.gitkeep
+models/*
+renders/*
