@@ -2,6 +2,12 @@ from pathlib import Path
 
 
 
+def _part_line(part, color, position, rotation_matrix):
+    x, y, z = position
+    r11, r12, r13, r21, r22, r23, r31, r32, r33 = rotation_matrix
+    return f"1 {color} {x} {y} {z} {r11} {r12} {r13} {r21} {r22} {r23} {r31} {r32} {r33} {part}.dat\n"
+
+
 def add_part(model_path, part, color, position, rotation_matrix):
     """
     Adds a part to the LDraw model.
@@ -16,14 +22,33 @@ def add_part(model_path, part, color, position, rotation_matrix):
             row3, row3, row3). Use (1, 0, 0, 0, 1, 0, 0, 0, 1) for no rotation
             (identity matrix).
     """
-    x, y, z = position
-    r11, r12, r13, r21, r22, r23, r31, r32, r33 = rotation_matrix
-
-    line = f"1 {color} {x} {y} {z} {r11} {r12} {r13} {r21} {r22} {r23} {r31} {r32} {r33} {part}.dat\n"
-
+    line = _part_line(part, color, position, rotation_matrix)
     Path(model_path).parent.mkdir(parents=True, exist_ok=True)
     with open(model_path, "a") as f:
         f.write(line)
+
+
+def add_parts_batch(model_path, parts):
+    """
+    Adds many parts to the LDraw model in a single call, instead of one round trip per part.
+
+    Args:
+        model_path (str): Path to the .ldr file to append the parts to.
+        parts (list[dict]): Each dict has the same fields as add_part's arguments:
+            {"part": str, "color": int, "position": (x, y, z),
+             "rotation_matrix": (9 numbers)}.
+
+    Returns:
+        int: The number of parts written.
+    """
+    lines = [
+        _part_line(p["part"], p["color"], p["position"], p["rotation_matrix"])
+        for p in parts
+    ]
+    Path(model_path).parent.mkdir(parents=True, exist_ok=True)
+    with open(model_path, "a") as f:
+        f.writelines(lines)
+    return len(lines)
 
 
 
@@ -65,18 +90,3 @@ def remove_part(model_path, part_index):
         for part in parts:
             f.write(part + "\n")
 
-
-def search_parts(query, index):
-    """
-    Searches the parts index for parts whose name contains the query string
-    (case-insensitive).
-
-    Args:
-        query (str): Text to search for in part names.
-        index (dict): The parts index, as returned by load_parts_index.
-
-    Returns:
-        dict: Subset of the index with only matching parts.
-    """
-    query = query.lower()
-    return {part_id: name for part_id, name in index.items() if query in name.lower()}

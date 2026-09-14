@@ -4,6 +4,7 @@ __pycache__/
 *.pyc
 data/ldraw/*
 data/parts_library.json
+data/geometry_cache.json
 !data/.gitkeep
 models/*
 renders/*
