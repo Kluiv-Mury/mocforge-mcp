@@ -64,3 +64,19 @@ def remove_part(model_path, part_index):
     with open(model_path, "w") as f:
         for part in parts:
             f.write(part + "\n")
+
+
+def search_parts(query, index):
+    """
+    Searches the parts index for parts whose name contains the query string
+    (case-insensitive).
+
+    Args:
+        query (str): Text to search for in part names.
+        index (dict): The parts index, as returned by load_parts_index.
+
+    Returns:
+        dict: Subset of the index with only matching parts.
+    """
+    query = query.lower()
+    return {part_id: name for part_id, name in index.items() if query in name.lower()}
