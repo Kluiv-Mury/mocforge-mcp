@@ -26,5 +26,3 @@ def render_view(model_path, output_path, width=640, height=480):
         raise RuntimeError(f"Erro ao renderizar(código {resultado.returncode}): {resultado.stderr}")
     return output_path
 
-
-render_view("data/models/test.ldr", "data/renders/test.png", 800, 600)

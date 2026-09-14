@@ -1,5 +1,6 @@
 from fastmcp import FastMCP
 from core.ldraw_model import add_part, list_parts, remove_part
+from core.parts_library import load_parts_index, search_parts
 from core.renderer import render_view
 
 mcp = FastMCP("MocForge MCP")
@@ -63,8 +64,6 @@ def render_view_tool(model_path: str, output_path: str, width: int = 640, height
     """
     return render_view(model_path, output_path, width, height)
 
-
-from core.parts_library import load_parts_index, search_parts
 
 @mcp.tool()
 def search_parts_tool(query: str) -> dict[str, str]:

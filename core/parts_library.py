@@ -1,11 +1,11 @@
 from pathlib import Path
-from config import settings
+from config import settings, BASE_DIR
 import json
 
 
 def load_parts_index():
 
-    path_cache = Path("data/parts_library.json")
+    path_cache = BASE_DIR / "data" / "parts_library.json"
     
     if path_cache.exists():
         with open(path_cache, "r") as arq:
@@ -26,6 +26,18 @@ def load_parts_index():
     return indice
 
 
-result = load_parts_index()
 
-print(result["1"], len(result))
+def search_parts(query, index):
+    """
+    Searches the parts index for parts whose name contains the query string
+    (case-insensitive).
+
+    Args:
+        query (str): Text to search for in part names.
+        index (dict): The parts index, as returned by load_parts_index.
+
+    Returns:
+        dict: Subset of the index with only matching parts.
+    """
+    query = query.lower()
+    return {part_id: name for part_id, name in index.items() if query in name.lower()}
