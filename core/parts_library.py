@@ -3,13 +3,20 @@ from config import settings, BASE_DIR
 import json
 
 
+_index = None
+
+
 def load_parts_index():
+    global _index
+    if _index is not None:
+        return _index
 
     path_cache = BASE_DIR / "data" / "parts_library.json"
-    
+
     if path_cache.exists():
         with open(path_cache, "r") as arq:
-            return json.load(arq)
+            _index = json.load(arq)
+        return _index
 
     indice = {}
     parts_dir = Path(settings.ldraw_library_path) / "parts"
@@ -20,17 +27,24 @@ def load_parts_index():
             piece = f.readline().strip().removeprefix("0 ")
         indice[arq.stem] = piece
 
+    path_cache.parent.mkdir(parents=True, exist_ok=True)
     with open(path_cache, "w") as arq:
         json.dump(indice, arq, indent=2)
 
-    return indice
+    _index = indice
+    return _index
 
+
+def _normalize(text):
+    """LDraw pads names to align the numbers ("Brick  2 x  4"), so a natural query like
+    "brick 2 x 4" would never match on a raw substring test."""
+    return " ".join(text.lower().split())
 
 
 def search_parts(query, index):
     """
     Searches the parts index for parts whose name contains the query string
-    (case-insensitive).
+    (case-insensitive, ignoring differences in spacing).
 
     Args:
         query (str): Text to search for in part names.
@@ -39,5 +53,5 @@ def search_parts(query, index):
     Returns:
         dict: Subset of the index with only matching parts.
     """
-    query = query.lower()
-    return {part_id: name for part_id, name in index.items() if query in name.lower()}
+    query = _normalize(query)
+    return {part_id: name for part_id, name in index.items() if query in _normalize(name)}

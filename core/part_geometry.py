@@ -13,6 +13,7 @@ or aligning it along an arbitrary direction).
 Results are cached to data/geometry_cache.json (same pattern as parts_library.json) so this
 expensive recursive parse only happens once per part across the life of the server.
 """
+import atexit
 import json
 import math
 import os
@@ -23,7 +24,11 @@ from config import settings, BASE_DIR
 SEARCH_SUBDIRS = ["parts", "p", os.path.join("parts", "s"), os.path.join("p", "8"), os.path.join("p", "48")]
 
 _cache = None
+_cache_dirty = False
 _cache_path = BASE_DIR / "data" / "geometry_cache.json"
+
+_dat_paths = {}
+_points_cache = {}
 
 
 def _load_cache():
@@ -39,19 +44,41 @@ def _load_cache():
 
 
 def _save_cache():
+    global _cache_dirty
+    if not _cache_dirty or _cache is None:
+        return
     _cache_path.parent.mkdir(parents=True, exist_ok=True)
     with open(_cache_path, "w", encoding="utf-8") as f:
         json.dump(_cache, f, indent=2)
+    _cache_dirty = False
+
+
+atexit.register(_save_cache)
+
+
+def _norm(part_id):
+    """LDraw writes sub-part references Windows-style ("s\\32523s01.dat"), which resolves to
+    nothing on a POSIX filesystem — half the library references a sub-part that way, and an
+    unresolved reference is dropped silently, leaving the part measured without it. Callers
+    also pass bare ids where the files carry the extension, and both spellings must land on
+    the same cache entry or every shared primitive gets parsed twice."""
+    p = part_id.replace("\\", "/")
+    return p[:-4] if p.lower().endswith(".dat") else p
 
 
 def _find_dat(part_id):
-    name = part_id if part_id.endswith(".dat") else part_id + ".dat"
+    key = _norm(part_id)
+    if key in _dat_paths:
+        return _dat_paths[key]
     root = Path(settings.ldraw_library_path)
+    found = None
     for d in SEARCH_SUBDIRS:
-        p = root / d / name
+        p = root / d / (key + ".dat")
         if p.exists():
-            return p
-    return None
+            found = p
+            break
+    _dat_paths[key] = found
+    return found
 
 
 def _mat_mul(a, v):
@@ -70,13 +97,25 @@ def compose_rot(a, b):
     )
 
 
-def _collect_vertices(part_id, mat=(1,0,0,0,1,0,0,0,1), off=(0,0,0), depth=0):
-    if depth > 6:
+def _local_points(part_id, _visiting=frozenset()):
+    """
+    Vertices of a part in its OWN coordinate space, so the result depends only on the file
+    and can be cached and reused wherever that file is referenced. Primitives like stud.dat
+    recur dozens of times per part and across nearly every part in the library; parsing them
+    once per process instead of once per reference is what keeps the recursion cheap.
+    """
+    key = _norm(part_id)
+    if key in _points_cache:
+        return _points_cache[key]
+    if key in _visiting:
         return []
-    path = _find_dat(part_id)
+    path = _find_dat(key)
     if not path:
+        _points_cache[key] = []
         return []
+
     pts = []
+    sub_visiting = _visiting | {key}
     with open(path, "r", encoding="utf-8", errors="replace") as f:
         for line in f:
             toks = line.split()
@@ -87,16 +126,15 @@ def _collect_vertices(part_id, mat=(1,0,0,0,1,0,0,0,1), off=(0,0,0), depth=0):
                 x, y, z = (float(v) for v in toks[2:5])
                 sub_mat = tuple(float(v) for v in toks[5:14])
                 sub_part = toks[14]
-                new_mat = compose_rot(sub_mat, mat)
-                wx, wy, wz = _mat_mul(mat, (x, y, z))
-                new_off = (off[0]+wx, off[1]+wy, off[2]+wz)
-                pts.extend(_collect_vertices(sub_part, new_mat, new_off, depth+1))
+                for p in _local_points(sub_part, sub_visiting):
+                    wx, wy, wz = _mat_mul(sub_mat, p)
+                    pts.append((x+wx, y+wy, z+wz))
             elif t in ("2", "3", "4", "5"):
                 nums = [float(v) for v in toks[2:]]
                 for i in range(0, len(nums) - 2, 3):
-                    lx, ly, lz = nums[i], nums[i+1], nums[i+2]
-                    wx, wy, wz = _mat_mul(mat, (lx, ly, lz))
-                    pts.append((off[0]+wx, off[1]+wy, off[2]+wz))
+                    pts.append((nums[i], nums[i+1], nums[i+2]))
+
+    _points_cache[key] = pts
     return pts
 
 
@@ -113,14 +151,15 @@ def get_part_geometry(part_id):
         }
     or None if the part could not be found/parsed.
     """
+    global _cache_dirty
     cache = _load_cache()
     if part_id in cache:
         return cache[part_id]
 
-    pts = _collect_vertices(part_id)
+    pts = _local_points(part_id)
     if not pts:
         cache[part_id] = None
-        _save_cache()
+        _cache_dirty = True
         return None
 
     xs = [p[0] for p in pts]; ys = [p[1] for p in pts]; zs = [p[2] for p in pts]
@@ -136,7 +175,7 @@ def get_part_geometry(part_id):
         "long_axis": long_axis,
     }
     cache[part_id] = result
-    _save_cache()
+    _cache_dirty = True
     return result
 
 
